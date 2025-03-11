@@ -17,7 +17,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 ]
 
-COMMON_PARAMS = ['redirect', 'redirect_to', 'url', 'next', 'return', 'dest']
+COMMON_PARAMS = ['redirect', 'redirect_to', 'url', 'next', 'return', 'dest', 'direct']
 
 def random_user_agent():
     return random.choice(USER_AGENTS)
@@ -92,4 +92,3 @@ if __name__ == "__main__":
         print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
     else:
         print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
-
