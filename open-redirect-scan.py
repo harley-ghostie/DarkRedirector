@@ -58,7 +58,8 @@ def test_open_redirect(url, payload, encode, headers):
                 response = requests.get(modified_url, headers=headers, timeout=10)
 
                 if payload in response.text:
-                    print(f"{RED}[VULNERÁVEL]{ENDC} {modified_url}")
+                    reflected_part = response.text[response.text.find(payload)-40:response.text.find(payload)+len(payload)+40]
+                    print(f"{RED}[VULNERÁVEL] {modified_url}\nRefletido na resposta: ...{reflected_part}...{ENDC}")
                     vulnerable = True
                 else:
                     print(f"[SEGURO] {modified_url}")
