@@ -2,8 +2,8 @@ import requests
 import argparse
 import random
 import time
-import sys
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
+from urllib.parse import urlparse, urljoin, parse_qs, urlencode, urlunparse, quote_plus
+from bs4 import BeautifulSoup
 
 # Cores para impressão no terminal
 RED = '\033[91m'
@@ -25,16 +25,28 @@ def random_user_agent():
 def random_delay():
     return random.randint(5, 10)
 
-def test_open_redirect(url, payload, encode, headers):
-    parsed_url = urlparse(url)
-    query_params = parse_qs(parsed_url.query)
+def get_links(url, headers):
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links = set()
+        for link in soup.find_all('a', href=True):
+            full_link = urljoin(url, link['href'])
+            links.add(full_link)
+        return links
+    except requests.exceptions.RequestException:
+        return set()
 
+def test_open_redirect(url, payload, encode, headers):
+    urls_to_test = get_links(url, headers)
+    urls_to_test.add(url)
     vulnerable = False
 
-    tested = False
-    for param in query_params:
-        if param.lower() in COMMON_PARAMS:
-            tested = True
+    for target_url in urls_to_test:
+        parsed_url = urlparse(target_url)
+        query_params = parse_qs(parsed_url.query)
+
+        for param in COMMON_PARAMS:
             original_params = query_params.copy()
             original_payload = quote_plus(payload) if encode else payload
             original_params[param] = original_payload
@@ -56,14 +68,11 @@ def test_open_redirect(url, payload, encode, headers):
             except requests.exceptions.RequestException as e:
                 print(f"[ERRO] {modified_url} - {str(e)}")
 
-    if not tested:
-        print("Nenhum parâmetro suspeito encontrado na URL fornecida.")
-
     return vulnerable
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Scanner de Open Redirect.')
-    parser.add_argument('-u', '--url', required=True, help='URL a ser testada')
+    parser.add_argument('-u', '--url', required=True, help='URL base da aplicação a ser testada')
     parser.add_argument('-p', '--payload', default='https://myserver.com', help='Payload para testar open redirect')
     parser.add_argument('--encode', action='store_true', help='Encode o payload para URL encoding')
     parser.add_argument('--auth', help='Cabeçalho de autenticação para sistemas autenticados (ex: "Cookie: session=abc", "Authorization: Bearer xyz")')
@@ -83,3 +92,4 @@ if __name__ == "__main__":
         print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
     else:
         print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
+
