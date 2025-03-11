@@ -1,6 +1,11 @@
 # open-redirect-scanner
 
-Este script em Python realiza testes automatizados para identificar vulnerabilidades de Open Redirect em aplicações web e APIs.
+O script é uma ferramenta automatizada que realiza testes de segurança para identificar vulnerabilidades de **Open Redirect** em aplicações web ou APIs. Ele busca automaticamente URLs internas e parâmetros comuns relacionados a redirecionamento, injeta um payload personalizado e verifica a reflexão desse payload nas respostas HTML. Para evitar detecção por sistemas de proteção (como WAF), utiliza User-Agents aleatórios e aplica atrasos aleatórios entre as requisições. Além disso, suporta autenticação personalizada para testes em ambientes restritos.
+
+<b>Dependências:</b><br>
+    
+    pip install beautifulsoup4
+
 
 <b>Funcionalidades Principais</b><br>
 
