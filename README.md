@@ -1,4 +1,4 @@
-# open-redirect-scanner
+# Open Redirec Scan
 
 O script é uma ferramenta automatizada que realiza testes de segurança para identificar vulnerabilidades de **Open Redirect** em aplicações web ou APIs. Ele busca automaticamente URLs internas e parâmetros comuns relacionados a redirecionamento, injeta um payload personalizado e verifica a reflexão desse payload nas respostas HTML. Para evitar detecção por sistemas de proteção (como WAF), utiliza User-Agents aleatórios e aplica atrasos aleatórios entre as requisições. Além disso, suporta autenticação personalizada para testes em ambientes restritos.
 
@@ -18,9 +18,9 @@ O script é uma ferramenta automatizada que realiza testes de segurança para id
 
 <b>Exemplo de Uso</b><br>
 
-    python open_redirect_scanner.py -u "https://example.com?redirect=teste" [--encode] [--auth "Cookie: session=abc123"]
+    python dark-redirector.py -u "https://example.com?redirect=teste" [--encode] [--auth "Cookie: session=abc123"]
     
-    python script.py -u "https://exemplo.com" --auth "Authorization: Bearer tokenxyz"
+    python dark-redirector.py -u "https://exemplo.com" --auth "Authorization: Bearer tokenxyz"
 
 
 <b>Opções de Flags</b><br>
