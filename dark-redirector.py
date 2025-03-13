@@ -25,55 +25,51 @@ def random_user_agent():
 def random_delay():
     return random.randint(5, 10)
 
-def get_links(url, headers):
+def extract_possible_params(url, headers):
+    """Busca por possíveis parâmetros dentro do corpo da resposta HTML."""
     try:
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        links = set()
-        for link in soup.find_all('a', href=True):
-            full_link = urljoin(url, link['href'])
-            links.add(full_link)
-        return links
+        found_params = set()
+        
+        for form in soup.find_all('form'):
+            for input_tag in form.find_all('input'):
+                if input_tag.has_attr('name'):
+                    found_params.add(input_tag['name'])
+        
+        for a_tag in soup.find_all('a', href=True):
+            parsed_href = urlparse(a_tag['href'])
+            for param in parse_qs(parsed_href.query).keys():
+                found_params.add(param)
+        
+        return found_params
     except requests.exceptions.RequestException:
         return set()
 
 def test_open_redirect(url, payload, encode, headers):
-    urls_to_test = get_links(url, headers)
-    urls_to_test.add(url)
     vulnerable = False
+    possible_params = extract_possible_params(url, headers)
+    all_params = COMMON_PARAMS + list(possible_params)
 
-    for target_url in urls_to_test:
-        parsed_url = urlparse(target_url)
-        query_params = parse_qs(parsed_url.query)
-
-        for param in COMMON_PARAMS:
-            original_params = query_params.copy()
-            original_payload = quote_plus(payload) if encode else payload
-            original_params[param] = original_payload
-            encoded_params = urlencode(original_params, doseq=True)
-
-            modified_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', encoded_params, ''))
-
-            try:
-                response = requests.get(modified_url, headers=headers, timeout=10)
-
-                if payload in response.text:
-                    reflected_part = response.text[response.text.find(payload)-40:response.text.find(payload)+len(payload)+40]
-                    print(f"{RED}[VULNERÁVEL] {modified_url}\nRefletido na resposta: ...{reflected_part}...{ENDC}")
-                    vulnerable = True
-                else:
-                    print(f"[SEGURO] {modified_url}")
-
-                time.sleep(random_delay())
-
-            except requests.exceptions.RequestException as e:
-                print(f"[ERRO] {modified_url} - {str(e)}")
+    for param in all_params:
+        modified_url = f"{url}/?{param}={quote_plus(payload) if encode else payload}"
+        try:
+            response = requests.get(modified_url, headers=headers, timeout=10)
+            if payload in response.text:
+                reflected_part = response.text[response.text.find(payload)-40:response.text.find(payload)+len(payload)+40]
+                print(f"{RED}[VULNERÁVEL] {modified_url}\nRefletido na resposta: ...{reflected_part}...{ENDC}")
+                vulnerable = True
+            else:
+                print(f"[SEGURO] {modified_url}")
+            time.sleep(random_delay())
+        except requests.exceptions.RequestException as e:
+            print(f"[ERRO] {modified_url} - {str(e)}")
 
     return vulnerable
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Scanner de Open Redirect.')
-    parser.add_argument('-u', '--url', required=True, help='URL base da aplicação a ser testada')
+    parser.add_argument('-u', '--url', required=True, help='URL base da aplicação a ser testada (deve terminar com /)')
     parser.add_argument('-p', '--payload', default='https://myserver.com', help='Payload para testar open redirect')
     parser.add_argument('--encode', action='store_true', help='Encode o payload para URL encoding')
     parser.add_argument('--auth', help='Cabeçalho de autenticação para sistemas autenticados (ex: "Cookie: session=abc", "Authorization: Bearer xyz")')
