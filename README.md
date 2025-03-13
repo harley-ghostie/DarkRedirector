@@ -1,3 +1,5 @@
+<p align="left"><img src="http://img.shields.io/static/v1?label=STATUS&message=EM%20DESENVOLVIMENTO&color=GREEN&style=for-the-badge"/></p>
+
 # Open Redirec Scan
 
 O script é uma ferramenta automatizada que realiza testes de segurança para identificar vulnerabilidades de **Open Redirect** em aplicações web ou APIs. Ele busca automaticamente URLs internas e parâmetros comuns relacionados a redirecionamento, injeta um payload personalizado e verifica a reflexão desse payload nas respostas HTML. Para evitar detecção por sistemas de proteção (como WAF), utiliza User-Agents aleatórios e aplica atrasos aleatórios entre as requisições. Além disso, suporta autenticação personalizada para testes em ambientes restritos.
