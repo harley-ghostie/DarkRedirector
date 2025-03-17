@@ -4,6 +4,7 @@ import random
 import time
 from urllib.parse import urlparse, urljoin, parse_qs, urlencode, urlunparse, quote_plus
 from bs4 import BeautifulSoup
+import re
 
 # Cores para impressão no terminal
 RED = '\033[91m'
@@ -46,6 +47,29 @@ def extract_possible_params(url, headers):
     except requests.exceptions.RequestException:
         return set()
 
+def test_dom_based_redirect(url, headers):
+    """Testa possíveis vulnerabilidades de Open Redirect baseadas em DOM."""
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        dom_vulnerable_patterns = [
+            r"window\.location\s*=", 
+            r"document\.location\s*=", 
+            r"window\.location\.href\s*=", 
+            r"document\.location\.href\s*=", 
+            r"window\.navigate\s*\(",
+            r"location\.assign\s*\(",
+            r"location\.replace\s*\(",
+            r"eval\s*\(",
+        ]
+        for pattern in dom_vulnerable_patterns:
+            if re.search(pattern, response.text):
+                print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED] {url}{ENDC}")
+                return True
+        print(f"[DOM SEGURO] {url}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ERRO DOM] {url} - {str(e)}")
+    return False
+
 def test_open_redirect(url, payload, encode, headers):
     vulnerable = False
     possible_params = extract_possible_params(url, headers)
@@ -84,8 +108,10 @@ if __name__ == "__main__":
     print(f"\nIniciando teste em: {args.url}\n")
 
     vulneravel = test_open_redirect(args.url, args.payload, args.encode, headers)
+    dom_vulneravel = test_dom_based_redirect(args.url, headers)
 
-    if vulneravel:
+    if vulneravel or dom_vulneravel:
         print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
     else:
         print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
+
