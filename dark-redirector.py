@@ -20,6 +20,24 @@ USER_AGENTS = [
 
 COMMON_PARAMS = ['redirect', 'redirect_to', 'url', 'next', 'return', 'dest', 'direct']
 
+DOM_VULNERABLE_PATTERNS = [
+    r"location\s*=", 
+    r"location\.host", 
+    r"location\.hostname", 
+    r"location\.href", 
+    r"location\.pathname", 
+    r"location\.search", 
+    r"location\.protocol", 
+    r"location\.assign\s*\(",
+    r"location\.replace\s*\(",
+    r"open\s*\(",
+    r"element\.srcdoc", 
+    r"XMLHttpRequest\.open\s*\(",
+    r"XMLHttpRequest\.send\s*\(",
+    r"jQuery\.ajax\s*\(",
+    r"\$\.ajax\s*\(",
+]
+
 def random_user_agent():
     return random.choice(USER_AGENTS)
 
@@ -29,7 +47,14 @@ def random_delay():
 def generate_poc(url, param, payload):
     """Gera uma prova de conceito (PoC) demonstrando a vulnerabilidade."""
     poc = f"URL vulnerável: {url}/?{param}={payload}\n"
-    poc += "Se acessarmos essa URL, o navegador será redirecionado para o payload fornecido, o que pode permitir ataques como phishing ou roubo de credenciais."
+    poc += "Se acessarmos essa URL, o navegador será redirecionado para o payload fornecido, permitindo possíveis ataques como phishing ou roubo de credenciais."
+    return poc
+
+def generate_dom_poc(url, pattern):
+    """Gera uma PoC para vulnerabilidades baseadas em DOM."""
+    poc = f"URL vulnerável: {url}\n"
+    poc += f"O código contém o padrão potencialmente inseguro: {pattern}\n"
+    poc += "Se um atacante manipular parâmetros no DOM, poderá redirecionar usuários sem validação adequada."
     return poc
 
 def test_open_redirect(url, payload, encode, headers):
@@ -49,6 +74,21 @@ def test_open_redirect(url, payload, encode, headers):
             print(f"[ERRO] {modified_url} - {str(e)}")
     return vulnerable
 
+def test_dom_based_redirect(url, headers):
+    """Testa possíveis vulnerabilidades de Open Redirect baseadas em DOM."""
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        for pattern in DOM_VULNERABLE_PATTERNS:
+            match = re.search(pattern, response.text)
+            if match:
+                poc = generate_dom_poc(url, match.group())
+                print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED] {url}\nPoC:\n{poc}{ENDC}")
+                return True
+        print(f"[DOM SEGURO] {url}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ERRO DOM] {url} - {str(e)}")
+    return False
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Scanner de Open Redirect.')
     parser.add_argument('-u', '--url', required=True, help='URL base da aplicação a ser testada (deve terminar com /)')
@@ -66,9 +106,13 @@ if __name__ == "__main__":
     print(f"\nIniciando teste em: {args.url}\n")
 
     vulneravel = test_open_redirect(args.url, args.payload, args.encode, headers)
+    dom_vulneravel = test_dom_based_redirect(args.url, headers)
 
-    if vulneravel:
+    if vulneravel or dom_vulneravel:
         print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
     else:
         print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
+
+
+
 
