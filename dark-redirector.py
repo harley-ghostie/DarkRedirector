@@ -57,6 +57,46 @@ def generate_dom_poc(url, pattern):
     poc += "Se um atacante manipular parâmetros no DOM, poderá redirecionar usuários sem validação adequada."
     return poc
 
+def find_input_fields(url, headers):
+    """Encontra formulários que podem armazenar dados do usuário."""
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        forms = soup.find_all('form')
+        input_fields = []
+        for form in forms:
+            inputs = form.find_all('input')
+            for inp in inputs:
+                if inp.has_attr('name'):
+                    input_fields.append(inp['name'])
+        return input_fields
+    except requests.exceptions.RequestException:
+        return []
+
+def test_stored_open_redirect(url, headers, payload):
+    """Testa Open Redirect armazenado enviando um payload e verificando se é refletido futuramente."""
+    input_fields = find_input_fields(url, headers)
+    if not input_fields:
+        print("[INFO] Nenhum campo de entrada encontrado para teste de Open Redirect armazenado.")
+        return False
+
+    vulnerable = False
+    for field in input_fields:
+        post_data = {field: payload}
+        try:
+            response = requests.post(url, headers=headers, data=post_data, timeout=10)
+            time.sleep(random_delay())  # Aguardar tempo para garantir que o dado seja armazenado
+
+            response_check = requests.get(url, headers=headers, timeout=10)
+            if payload in response_check.text:
+                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT ARMAZENADO] {url}\nO payload foi encontrado salvo na resposta.{ENDC}")
+                vulnerable = True
+            else:
+                print(f"[SEGURO - OPEN REDIRECT ARMAZENADO] {url}")
+        except requests.exceptions.RequestException as e:
+            print(f"[ERRO] {url} - {str(e)}")
+    return vulnerable
+
 def test_open_redirect(url, payload, encode, headers):
     vulnerable = False
     for param in COMMON_PARAMS:
@@ -107,12 +147,12 @@ if __name__ == "__main__":
 
     vulneravel = test_open_redirect(args.url, args.payload, args.encode, headers)
     dom_vulneravel = test_dom_based_redirect(args.url, headers)
+    stored_vulneravel = test_stored_open_redirect(args.url, headers, args.payload)
 
-    if vulneravel or dom_vulneravel:
+    if vulneravel or dom_vulneravel or stored_vulneravel:
         print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
     else:
         print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
-
 
 
 
