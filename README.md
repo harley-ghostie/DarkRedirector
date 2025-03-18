@@ -34,6 +34,9 @@ O script é uma ferramenta automatizada que realiza testes de segurança para id
 <b>--encode:</b>  (Opcional) Ativa a codificação URL do payload.<br>
 
 <b>--auth: </b> (Opcional) Define o cabeçalho de autenticação (ex.: "Cookie: session=abc123").<br>
+<b>--waf: Caso não inserido a flag ele irá automaticamente no tempo de 2 a 4 segundos</b><br>
+    medium → Delay de 5 a 7 segundos<br>
+    advanced → Delay de 8 a 12 segundos<br>
 
 Resultados vulneráveis são destacados claramente em vermelho no terminal.
 
