@@ -17,7 +17,16 @@ O script é uma ferramenta automatizada que realiza testes de segurança para id
 - Delay aleatório:** Tempo de espera aleatório (entre 5 e 10 segundos) entre requisições, minimizando risco de bloqueios.<br>
 - Suporte a autenticação:** Possibilidade de definir cabeçalhos personalizados para autenticação (`Cookie`, `Authorization Bearer`, tokens, etc.).<br>
 - Codificação opcional:** Flag opcional para codificar payload em URL encoding.<br>
+- Crawling automático: Explora links internos (a, script, link, img) para encontrar possíveis paths vulneráveis.<br>
+- Gera PoCs (Provas de Conceito): Exibe URLs exploráveis e o motivo da vulnerabilidade.<br>
 
+  <b>Testes de Open Redirect:</b><br>
+
+  <b>Refletido:</b> Testa parâmetros comuns (?redirect=, ?url=, etc.).<br>
+  <b>Armazenado:</b> Envia um payload e verifica se é refletido posteriormente.<br>
+  <b>Baseado em DOM:</b> Busca scripts inseguros no JavaScript da página.<br>
+    
+     
 <b>Exemplo de Uso</b><br>
 
     python dark-redirector.py -u "https://example.com?redirect=teste" [--encode] [--auth "Cookie: session=abc123"]
