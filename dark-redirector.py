@@ -2,7 +2,7 @@ import requests
 import argparse
 import random
 import time
-from urllib.parse import urlparse, urljoin, parse_qs, urlencode, urlunparse, quote_plus
+from urllib.parse import urlparse, urljoin, parse_qs, quote_plus
 from bs4 import BeautifulSoup
 import re
 
@@ -21,22 +21,19 @@ USER_AGENTS = [
 COMMON_PARAMS = ['redirect', 'redirect_to', 'url', 'next', 'return', 'dest', 'direct']
 
 DOM_VULNERABLE_PATTERNS = [
-    r"location\s*=", 
-    r"location\.host", 
-    r"location\.hostname", 
-    r"location\.href", 
-    r"location\.pathname", 
-    r"location\.search", 
-    r"location\.protocol", 
-    r"location\.assign\s*\(",
-    r"location\.replace\s*\(",
-    r"open\s*\(",
-    r"element\.srcdoc", 
-    r"XMLHttpRequest\.open\s*\(",
-    r"XMLHttpRequest\.send\s*\(",
-    r"jQuery\.ajax\s*\(",
-    r"\$\.ajax\s*\(",
+    r"location\s*=", r"location\.host", r"location\.hostname", r"location\.href", 
+    r"location\.pathname", r"location\.search", r"location\.protocol", 
+    r"location\.assign\s*\(", r"location\.replace\s*\(", r"open\s*\(",
+    r"element\.srcdoc", r"XMLHttpRequest\.open\s*\(", r"XMLHttpRequest\.send\s*\(",
+    r"jQuery\.ajax\s*\(", r"\$\.ajax\s*\(",
 ]
+
+# Lista para armazenar vulnerabilidades encontradas
+vulnerabilities = {
+    "reflected": [],
+    "stored": [],
+    "dom": []
+}
 
 def random_user_agent():
     return random.choice(USER_AGENTS)
@@ -46,88 +43,86 @@ def random_delay():
 
 def generate_poc(url, param, payload):
     """Gera uma prova de conceito (PoC) demonstrando a vulnerabilidade."""
-    poc = f"URL vulnerável: {url}/?{param}={payload}\n"
-    poc += "Se acessarmos essa URL, o navegador será redirecionado para o payload fornecido, permitindo possíveis ataques como phishing ou roubo de credenciais."
-    return poc
+    return f"URL vulnerável: {url}/?{param}={payload}\nO navegador será redirecionado sem validação, permitindo phishing ou sequestro de sessão."
 
 def generate_dom_poc(url, pattern):
     """Gera uma PoC para vulnerabilidades baseadas em DOM."""
-    poc = f"URL vulnerável: {url}\n"
-    poc += f"O código contém o padrão potencialmente inseguro: {pattern}\n"
-    poc += "Se um atacante manipular parâmetros no DOM, poderá redirecionar usuários sem validação adequada."
-    return poc
+    return f"URL vulnerável: {url}\nO código contém um padrão inseguro: {pattern}\nUm atacante pode manipular parâmetros no DOM e redirecionar usuários."
 
-def find_input_fields(url, headers):
-    """Encontra formulários que podem armazenar dados do usuário."""
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        forms = soup.find_all('form')
-        input_fields = []
-        for form in forms:
-            inputs = form.find_all('input')
-            for inp in inputs:
-                if inp.has_attr('name'):
-                    input_fields.append(inp['name'])
-        return input_fields
-    except requests.exceptions.RequestException:
-        return []
+def crawl_site(base_url, headers):
+    """Crawleia o site para encontrar possíveis paths internos, sem brute force."""
+    visited = set()
+    paths = set()
+    queue = [base_url]
 
-def test_stored_open_redirect(url, headers, payload):
-    """Testa Open Redirect armazenado enviando um payload e verificando se é refletido futuramente."""
-    input_fields = find_input_fields(url, headers)
-    if not input_fields:
-        print("[INFO] Nenhum campo de entrada encontrado para teste de Open Redirect armazenado.")
-        return False
+    while queue:
+        url = queue.pop(0)
+        if url in visited:
+            continue
+        visited.add(url)
 
-    vulnerable = False
-    for field in input_fields:
-        post_data = {field: payload}
         try:
-            response = requests.post(url, headers=headers, data=post_data, timeout=10)
-            time.sleep(random_delay())  # Aguardar tempo para garantir que o dado seja armazenado
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
 
-            response_check = requests.get(url, headers=headers, timeout=10)
-            if payload in response_check.text:
-                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT ARMAZENADO] {url}\nO payload foi encontrado salvo na resposta.{ENDC}")
-                vulnerable = True
-            else:
-                print(f"[SEGURO - OPEN REDIRECT ARMAZENADO] {url}")
-        except requests.exceptions.RequestException as e:
-            print(f"[ERRO] {url} - {str(e)}")
-    return vulnerable
+            # Coleta links internos
+            for link in soup.find_all(['a', 'script', 'link', 'img'], href=True):
+                href = link.get('href') or link.get('src')
+                if href and not href.startswith(('http', '#', 'mailto:', 'javascript:')):
+                    full_url = urljoin(base_url, href)
+                    parsed = urlparse(full_url)
+                    if base_url in full_url and parsed.path not in paths:
+                        paths.add(parsed.path)
+                        queue.append(full_url)
+        except requests.exceptions.RequestException:
+            continue
+
+    return paths
 
 def test_open_redirect(url, payload, encode, headers):
-    vulnerable = False
+    """Testa Open Redirect refletido em parâmetros comuns."""
     for param in COMMON_PARAMS:
         modified_url = f"{url}/?{param}={quote_plus(payload) if encode else payload}"
         try:
             response = requests.get(modified_url, headers=headers, timeout=10)
             if payload in response.text:
                 poc = generate_poc(url, param, payload)
+                vulnerabilities["reflected"].append((modified_url, poc))
                 print(f"{RED}[VULNERÁVEL] {modified_url}\nPoC:\n{poc}{ENDC}")
-                vulnerable = True
-            else:
-                print(f"[SEGURO] {modified_url}")
             time.sleep(random_delay())
-        except requests.exceptions.RequestException as e:
-            print(f"[ERRO] {modified_url} - {str(e)}")
-    return vulnerable
+        except requests.exceptions.RequestException:
+            continue
+
+def test_stored_open_redirect(url, headers, payload):
+    """Testa Open Redirect armazenado enviando um payload e verificando se é refletido futuramente."""
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        forms = soup.find_all('form')
+        for form in forms:
+            post_url = urljoin(url, form.get('action', ''))
+            post_data = {inp.get('name'): payload for inp in form.find_all('input') if inp.get('name')}
+            response_post = requests.post(post_url, headers=headers, data=post_data, timeout=10)
+            time.sleep(random_delay())
+            response_check = requests.get(url, headers=headers, timeout=10)
+            if payload in response_check.text:
+                vulnerabilities["stored"].append((url, "Payload armazenado e refletido na resposta."))
+                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT ARMAZENADO] {url}{ENDC}")
+    except requests.exceptions.RequestException:
+        return
 
 def test_dom_based_redirect(url, headers):
-    """Testa possíveis vulnerabilidades de Open Redirect baseadas em DOM."""
+    """Testa Open Redirect baseado em DOM procurando padrões no JavaScript da página."""
     try:
         response = requests.get(url, headers=headers, timeout=10)
         for pattern in DOM_VULNERABLE_PATTERNS:
             match = re.search(pattern, response.text)
             if match:
                 poc = generate_dom_poc(url, match.group())
+                vulnerabilities["dom"].append((url, poc))
                 print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED] {url}\nPoC:\n{poc}{ENDC}")
-                return True
-        print(f"[DOM SEGURO] {url}")
-    except requests.exceptions.RequestException as e:
-        print(f"[ERRO DOM] {url} - {str(e)}")
-    return False
+    except requests.exceptions.RequestException:
+        return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Scanner de Open Redirect.')
@@ -143,16 +138,15 @@ if __name__ == "__main__":
         key, value = args.auth.split(':', 1)
         headers[key.strip()] = value.strip()
 
-    print(f"\nIniciando teste em: {args.url}\n")
+    print(f"\n🔍 Iniciando busca de paths no site {args.url}...\n")
+    paths = crawl_site(args.url, headers)
+    
+    for path in paths:
+        full_url = urljoin(args.url, path)
+        test_open_redirect(full_url, args.payload, args.encode, headers)
+        test_dom_based_redirect(full_url, headers)
+        test_stored_open_redirect(full_url, headers, args.payload)
 
-    vulneravel = test_open_redirect(args.url, args.payload, args.encode, headers)
-    dom_vulneravel = test_dom_based_redirect(args.url, headers)
-    stored_vulneravel = test_stored_open_redirect(args.url, headers, args.payload)
-
-    if vulneravel or dom_vulneravel or stored_vulneravel:
-        print(f"\n{RED}Teste concluído: Vulnerabilidade encontrada!{ENDC}\n")
-    else:
-        print("\nTeste concluído: Nenhuma vulnerabilidade encontrada.\n")
-
+    print("\n✅ Teste concluído.")
 
 
