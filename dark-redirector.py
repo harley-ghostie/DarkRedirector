@@ -26,8 +26,14 @@ tested_urls = set()
 def random_user_agent():
     return random.choice(USER_AGENTS)
 
-def random_delay():
-    return random.uniform(1, 3)  # Reduzido o delay
+def get_delay(waf_level):
+    """Define o delay baseado na proteção do WAF"""
+    if waf_level == "medium":
+        return random.randint(5, 7)
+    elif waf_level == "advanced":
+        return random.randint(8, 12)
+    else:  # "basic" (Padrão)
+        return random.randint(2, 4)
 
 def crawl_site(base_url, headers):
     """Crawleia o site para encontrar possíveis paths internos, sem brute force."""
@@ -58,7 +64,7 @@ def crawl_site(base_url, headers):
 
     return paths
 
-def test_open_redirect(url, payload, encode, headers):
+def test_open_redirect(url, payload, encode, headers, waf_level):
     """Testa Open Redirect refletido."""
     if url in tested_urls:
         return
@@ -75,10 +81,11 @@ def test_open_redirect(url, payload, encode, headers):
                 response = future.result()
                 if payload in response.text:
                     print(f"{RED}[VULNERÁVEL] {modified_url}{ENDC}")
+                time.sleep(get_delay(waf_level))  # Delay ajustado conforme o WAF
             except requests.exceptions.RequestException:
                 continue
 
-def test_dom_based_redirect(url, headers):
+def test_dom_based_redirect(url, headers, waf_level):
     """Testa Open Redirect baseado em DOM."""
     if url in tested_urls:
         return
@@ -89,6 +96,7 @@ def test_dom_based_redirect(url, headers):
         for pattern in ["location.href", "window.location", "document.location"]:
             if pattern in response.text:
                 print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED] {url}{ENDC}")
+        time.sleep(get_delay(waf_level))  # Delay ajustado conforme o WAF
     except requests.exceptions.RequestException:
         return
 
@@ -98,6 +106,8 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--payload', default='https://myserver.com', help='Payload do Open Redirect.')
     parser.add_argument('--encode', action='store_true', help='Aplica URL encoding no payload.')
     parser.add_argument('--auth', help='Cabeçalho de autenticação (ex: "Cookie: session=abc")')
+    parser.add_argument('--waf', choices=['basic', 'medium', 'advanced'], default='basic',
+                        help='Nível de proteção do WAF (basic: 2-4s, medium: 5-7s, advanced: 8-12s)')
 
     args = parser.parse_args()
     headers = {'User-Agent': random_user_agent()}
@@ -112,7 +122,7 @@ if __name__ == "__main__":
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         for path in paths:
             full_url = urljoin(args.url, path)
-            executor.submit(test_open_redirect, full_url, args.payload, args.encode, headers)
-            executor.submit(test_dom_based_redirect, full_url, headers)
+            executor.submit(test_open_redirect, full_url, args.payload, args.encode, headers, args.waf)
+            executor.submit(test_dom_based_redirect, full_url, headers, args.waf)
 
     print("\n✅ Teste concluído.")
