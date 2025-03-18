@@ -40,15 +40,27 @@ def get_delay(waf_level):
         return random.randint(2, 4)
 
 def test_open_redirect_reflected(url, payload, encode, headers, waf_level):
-    """Testa Open Redirect refletido na URL."""
+    """Testa Open Redirect refletido nos parâmetros da URL e verifica se aparece no HTML."""
     for param in COMMON_PARAMS:
         modified_url = f"{url}/?{param}={quote_plus(payload) if encode else payload}"
         try:
             response = requests.get(modified_url, headers=headers, timeout=5, allow_redirects=False)
+
+            # Verifica se há um redirecionamento HTTP 3xx
             if response.status_code in [301, 302, 303, 307, 308]:
                 poc = f"URL vulnerável: {modified_url}\nA aplicação redireciona para um destino externo sem validação."
                 vulnerabilities["reflected"].append((modified_url, poc))
                 print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO]{ENDC} {modified_url}\nPoC:\n{poc}")
+
+            # Verifica se o payload está refletido no corpo da resposta HTML
+            elif payload in response.text:
+                start_index = response.text.find(payload) - 40
+                end_index = response.text.find(payload) + len(payload) + 40
+                reflected_snippet = response.text[max(0, start_index):min(len(response.text), end_index)]
+                
+                poc = f"URL vulnerável: {modified_url}\nO payload foi refletido na resposta HTML:\n...{reflected_snippet}..."
+                vulnerabilities["reflected"].append((modified_url, poc))
+                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO (NO HTML)]{ENDC} {modified_url}\nPoC:\n{poc}")
 
             time.sleep(get_delay(waf_level))
         except requests.exceptions.RequestException:
