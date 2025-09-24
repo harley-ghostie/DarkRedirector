@@ -29,23 +29,37 @@ O script é uma ferramenta automatizada que realiza testes de segurança para id
      
 <b>Exemplo de Uso</b><br>
 
-    python dark-redirector.py -u "https://example.com?redirect=teste" [--encode] [--auth "Cookie: session=abc123"]
+<b>✅ Comando básico:
     
-    python dark-redirector.py -u "https://exemplo.com" --auth "Authorization: Bearer tokenxyz"
+    python dark-redirector.py -u "https://www.alvo.com.br"
+
+<b>🔧 Comando com payload customizado:</b><br>
+
+    python dark-redirector.py -u "https://www.alvo.com.br" -p "https://evil.com"
+
+<b>🔐 Comando com autenticação (ex: Cookie ou Bearer):</b><br>
+
+    python dark-redirector.py -u "https://www.alvo.com.br" --auth "Cookie: session=abc123"
+
+<b>🔄 Comando com payload encode (URL encoding):</b><br>
+
+    python dark-redirector.py -u "https://www.alvo.com.br" --encode
+
+<b>🛡️ Comando com simulação de WAF avançado (delays maiores):</b><br>
+
+    python dark-redirector.py -u "https://www.alvo.com.br" --waf advanced
+
+<b>📦 Exemplo completo com tudo:</b><br>
+
+    python dark-redirector.py -u "https://www.alvo.com.br/pagina?token=xyz" \
+      -p "https://evil.com" \
+      --encode \
+      --auth "Authorization: Bearer abc.def.ghi" \
+      --waf medium
+<br>
 
 
-<b>Opções de Flags</b><br>
-
-<b>-u, --url:</b> (Obrigatório) Define a URL a ser testada.<br>
-
-<b>-p, --payload:</b>  (Opcional) Define o payload para testes (padrão: https://myserver.com).<br>
-
-<b>--encode:</b>  (Opcional) Ativa a codificação URL do payload.<br>
-
-<b>--auth: </b> (Opcional) Define o cabeçalho de autenticação (ex.: "Cookie: session=abc123").<br>
-<b>--waf: Caso não inserido a flag ele irá automaticamente no tempo de 2 a 4 segundos</b><br>
-    medium → Delay de 5 a 7 segundos<br>
-    advanced → Delay de 8 a 12 segundos<br>
+    
 
 Resultados vulneráveis são destacados claramente em vermelho no terminal.
 
