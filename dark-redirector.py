@@ -1,3 +1,4 @@
+
 import requests
 import argparse
 import random
@@ -31,7 +32,6 @@ def random_user_agent():
     return random.choice(USER_AGENTS)
 
 def get_delay(waf_level):
-    """Define o delay baseado na proteção do WAF"""
     if waf_level == "medium":
         return random.randint(5, 7)
     elif waf_level == "advanced":
@@ -40,24 +40,21 @@ def get_delay(waf_level):
         return random.randint(2, 4)
 
 def test_open_redirect_reflected(url, payload, encode, headers, waf_level):
-    """Testa Open Redirect refletido nos parâmetros da URL e verifica se aparece no HTML."""
     for param in COMMON_PARAMS:
-        modified_url = f"{url}/?{param}={quote_plus(payload) if encode else payload}"
+        separator = '&' if '?' in url else '?'
+        modified_url = f"{url}{separator}{param}={quote_plus(payload) if encode else payload}"
         try:
             response = requests.get(modified_url, headers=headers, timeout=5, allow_redirects=False)
 
-            # Verifica se há um redirecionamento HTTP 3xx
             if response.status_code in [301, 302, 303, 307, 308]:
                 poc = f"URL vulnerável: {modified_url}\nA aplicação redireciona para um destino externo sem validação."
                 vulnerabilities["reflected"].append((modified_url, poc))
                 print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO]{ENDC} {modified_url}\nPoC:\n{poc}")
 
-            # Verifica se o payload está refletido no corpo da resposta HTML
             elif payload in response.text:
                 start_index = response.text.find(payload) - 40
                 end_index = response.text.find(payload) + len(payload) + 40
                 reflected_snippet = response.text[max(0, start_index):min(len(response.text), end_index)]
-                
                 poc = f"URL vulnerável: {modified_url}\nO payload foi refletido na resposta HTML:\n...{reflected_snippet}..."
                 vulnerabilities["reflected"].append((modified_url, poc))
                 print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO (NO HTML)]{ENDC} {modified_url}\nPoC:\n{poc}")
@@ -67,29 +64,23 @@ def test_open_redirect_reflected(url, payload, encode, headers, waf_level):
             continue
 
 def test_open_redirect_stored(url, headers, payload, waf_level):
-    """Testa Open Redirect armazenado."""
     try:
         response = requests.get(url, headers=headers, timeout=5)
-
         if response.status_code == 200:
             post_data = {'comment': payload}
-            response_post = requests.post(url, headers=headers, data=post_data, timeout=5)
+            requests.post(url, headers=headers, data=post_data, timeout=5)
             time.sleep(get_delay(waf_level))
-
             response_check = requests.get(url, headers=headers, timeout=5)
             if payload in response_check.text:
                 poc = f"URL vulnerável: {url}\nO payload foi armazenado e refletido na resposta."
                 vulnerabilities["stored"].append((url, poc))
                 print(f"{RED}[VULNERÁVEL - OPEN REDIRECT ARMAZENADO]{ENDC} {url}\nPoC:\n{poc}")
-
     except requests.exceptions.RequestException:
         return
 
 def test_dom_based_redirect(url, headers, waf_level):
-    """Testa Open Redirect baseado em DOM."""
     try:
         response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
-        
         if response.status_code in [301, 302, 303, 307, 308]:
             poc = f"URL vulnerável: {url}\nA aplicação está redirecionando diretamente via HTTP."
             vulnerabilities["dom"].append((url, poc))
@@ -104,7 +95,6 @@ def test_dom_based_redirect(url, headers, waf_level):
                 return
 
         time.sleep(get_delay(waf_level))
-
     except requests.exceptions.RequestException:
         return
 
@@ -119,7 +109,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     headers = {'User-Agent': random_user_agent()}
-    
     if args.auth:
         key, value = args.auth.split(':', 1)
         headers[key.strip()] = value.strip()
@@ -129,14 +118,11 @@ if __name__ == "__main__":
         executor.submit(test_open_redirect_stored, args.url, headers, args.payload, args.waf)
         executor.submit(test_dom_based_redirect, args.url, headers, args.waf)
 
-    # 🔍 Exibir todas as vulnerabilidades encontradas no final
     print("\n🔍 **Relatório de Vulnerabilidades Encontradas:**\n")
-
     for category, issues in vulnerabilities.items():
         if issues:
-            print(f"{RED}🔴 {category.upper()}{ENDC}")  # Apenas o nome da vulnerabilidade em vermelho
+            print(f"{RED}🔴 {category.upper()}{ENDC}")
             for url, poc in issues:
-                print(f"[{category.upper()}] {url}\n{poc}")  # URLs e PoC sem formatação de cor
-
+                print(f"[{category.upper()}] {url}\n{poc}")
     print("\n✅ Teste concluído.")
 
