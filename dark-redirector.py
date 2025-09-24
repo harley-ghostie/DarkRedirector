@@ -1,11 +1,11 @@
-
+#!/usr/bin/env python3
 import requests
 import argparse
 import random
 import time
 import concurrent.futures
 import re
-from urllib.parse import quote_plus
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
 
 # Cores para saída
 RED = '\033[91m'
@@ -25,7 +25,6 @@ DOM_VULNERABLE_PATTERNS = [
     r"location\.assign\s*\(", r"open\s*\(", r"XMLHttpRequest\.open\s*\(", r"jQuery\.ajax\s*\("
 ]
 
-tested_urls = set()
 vulnerabilities = {"reflected": [], "stored": [], "dom": []}
 
 def random_user_agent():
@@ -40,25 +39,27 @@ def get_delay(waf_level):
         return random.randint(2, 4)
 
 def test_open_redirect_reflected(url, payload, encode, headers, waf_level):
+    parsed_url = urlparse(url)
     for param in COMMON_PARAMS:
-        separator = '&' if '?' in url else '?'
-        modified_url = f"{url}{separator}{param}={quote_plus(payload) if encode else payload}"
+        original_params = parse_qs(parsed_url.query)
+        modified_params = original_params.copy()
+        modified_params[param] = quote_plus(payload) if encode else payload
+        new_query = urlencode(modified_params, doseq=True)
+        final_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', new_query, ''))
+
         try:
-            response = requests.get(modified_url, headers=headers, timeout=5, allow_redirects=False)
-
+            response = requests.get(final_url, headers=headers, timeout=5, allow_redirects=False)
             if response.status_code in [301, 302, 303, 307, 308]:
-                poc = f"URL vulnerável: {modified_url}\nA aplicação redireciona para um destino externo sem validação."
-                vulnerabilities["reflected"].append((modified_url, poc))
-                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO]{ENDC} {modified_url}\nPoC:\n{poc}")
-
+                poc = f"URL vulnerável: {final_url}\nA aplicação redireciona para um destino externo sem validação."
+                vulnerabilities["reflected"].append((final_url, poc))
+                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO]{ENDC} {final_url}\nPoC:\n{poc}")
             elif payload in response.text:
-                start_index = response.text.find(payload) - 40
-                end_index = response.text.find(payload) + len(payload) + 40
-                reflected_snippet = response.text[max(0, start_index):min(len(response.text), end_index)]
-                poc = f"URL vulnerável: {modified_url}\nO payload foi refletido na resposta HTML:\n...{reflected_snippet}..."
-                vulnerabilities["reflected"].append((modified_url, poc))
-                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO (NO HTML)]{ENDC} {modified_url}\nPoC:\n{poc}")
-
+                start = max(0, response.text.find(payload) - 40)
+                end = response.text.find(payload) + len(payload) + 40
+                snippet = response.text[start:end]
+                poc = f"URL vulnerável: {final_url}\nPayload refletido na resposta HTML:\n...{snippet}..."
+                vulnerabilities["reflected"].append((final_url, poc))
+                print(f"{RED}[VULNERÁVEL - OPEN REDIRECT REFLETIDO (NO HTML)]{ENDC} {final_url}\nPoC:\n{poc}")
             time.sleep(get_delay(waf_level))
         except requests.exceptions.RequestException:
             continue
@@ -70,9 +71,9 @@ def test_open_redirect_stored(url, headers, payload, waf_level):
             post_data = {'comment': payload}
             requests.post(url, headers=headers, data=post_data, timeout=5)
             time.sleep(get_delay(waf_level))
-            response_check = requests.get(url, headers=headers, timeout=5)
-            if payload in response_check.text:
-                poc = f"URL vulnerável: {url}\nO payload foi armazenado e refletido na resposta."
+            check = requests.get(url, headers=headers, timeout=5)
+            if payload in check.text:
+                poc = f"URL vulnerável: {url}\nPayload armazenado e refletido na resposta."
                 vulnerabilities["stored"].append((url, poc))
                 print(f"{RED}[VULNERÁVEL - OPEN REDIRECT ARMAZENADO]{ENDC} {url}\nPoC:\n{poc}")
     except requests.exceptions.RequestException:
@@ -82,18 +83,16 @@ def test_dom_based_redirect(url, headers, waf_level):
     try:
         response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
         if response.status_code in [301, 302, 303, 307, 308]:
-            poc = f"URL vulnerável: {url}\nA aplicação está redirecionando diretamente via HTTP."
+            poc = f"URL vulnerável: {url}\nRedirecionamento direto via HTTP."
             vulnerabilities["dom"].append((url, poc))
             print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED]{ENDC} {url}\nPoC:\n{poc}")
             return
-
         for pattern in DOM_VULNERABLE_PATTERNS:
             if re.search(pattern, response.text):
                 poc = f"URL vulnerável: {url}\nCódigo suspeito encontrado: {pattern}"
                 vulnerabilities["dom"].append((url, poc))
                 print(f"{RED}[POTENCIALMENTE VULNERÁVEL - DOM BASED]{ENDC} {url}\nPoC:\n{poc}")
                 return
-
         time.sleep(get_delay(waf_level))
     except requests.exceptions.RequestException:
         return
@@ -109,6 +108,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     headers = {'User-Agent': random_user_agent()}
+
     if args.auth:
         key, value = args.auth.split(':', 1)
         headers[key.strip()] = value.strip()
