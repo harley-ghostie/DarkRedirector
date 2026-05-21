@@ -1,43 +1,4 @@
 #!/usr/bin/env python3
-"""
-open_redirect_tester.py
-========================
-
-This script improves upon simple HTTP‐based open redirect checks by using a
-headless browser to evaluate whether an application performs client‑side
-redirection after page load. Many modern web applications implement
-navigation logic in JavaScript rather than returning HTTP 3xx responses, so
-relying solely on the `requests` library can miss DOM‑based open redirects.
-
-Key features:
-
-* Generates a series of test URLs using common redirection parameter names
-  and multiple payload variations (including scheme‑relative and double
-  encoded forms) to probe for different server‑ and client‑side checks.
-* Uses Playwright to launch a headless Chromium browser for each test URL.
-  After navigation it inspects the final `window.location.href` and any
-  additional pages opened via `window.open` for the presence of the
-  attacker‑controlled host.
-* Performs a basic reflected open redirect check by looking for the
-  payload string in the returned HTML when the HTTP status is 200.
-* Accepts an optional authentication header (e.g. cookie) for logged‑in
-  tests, and a flag to URL‑encode payloads.
-
-Example usage:
-
-    python3 open_redirect_tester.py -u https://example.com/login --payload https://evil.com --encode --auth "Cookie: session=abcd"
-
-Before running this script make sure Playwright is installed and the
-Chromium browser is available:
-
-    pip install playwright
-    playwright install chromium
-
-Note: This script does not implement brute forcing of credentials. To test
-post‑login redirects you must supply a valid session token via the
-`--auth` option.
-"""
-
 import argparse
 import asyncio
 import random
